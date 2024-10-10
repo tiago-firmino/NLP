@@ -23,8 +23,8 @@ lemmatizer = WordNetLemmatizer()
 
 new_tokens=[]
 tokens=nltk.word_tokenize(content)
-lemm = [lemmatizer.lemmatize(word) for word in tokens]
-for token in tokens:
+lema = [lemmatizer.lemmatize(word) for word in tokens]
+for token in lema:
     if token not in stop_words and token not in punc:
         new_tokens.append(token)
 
