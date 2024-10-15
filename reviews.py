@@ -1,11 +1,12 @@
 ## PROJECT CODE GROUP 21
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.pipeline import Pipeline
 import re
 import nltk
 
@@ -29,7 +30,6 @@ def load_test_data(filepath):
     test_data['text'] = test_data['title'] + ' ' + test_data['from'] + ' ' + test_data['director'] + ' ' + test_data['plot']
     return test_data['text']
 
-
 def preprocess_text(text):
     lemmatizer = WordNetLemmatizer()
 
@@ -46,37 +46,10 @@ def preprocess_text(text):
     
     return text
 
-# Naive Bayes + CountVectorizer
-def train_naive_bayes(X_train, y_train):
-    count_vect = CountVectorizer(max_features=500, stop_words='english', max_df=0.7)
-    X_train_counts = count_vect.fit_transform(X_train)
-    clf_nb = MultinomialNB()
-    clf_nb.fit(X_train_counts, y_train)
-    return clf_nb, count_vect
-
-# SVC + TF-IDF Vectorizer«
-def train_svc(X_train, y_train):
-    tfidf_vect = TfidfVectorizer(stop_words='english', max_df=0.7)
-    X_train_tfidf = tfidf_vect.fit_transform(X_train)
-    clf_svc = SVC(kernel='linear', C=1.0)
-    clf_svc.fit(X_train_tfidf, y_train)
-    return clf_svc, tfidf_vect
-
-# Logistic Regression + TF-IDF
-def train_logistic_regression(X_train, y_train):
-    tfidf_vect = TfidfVectorizer(stop_words='english', max_df=0.7)
-    X_train_tfidf = tfidf_vect.fit_transform(X_train)
-    clf_lr = LogisticRegression(max_iter=1000)
-    clf_lr.fit(X_train_tfidf, y_train)
-    return clf_lr, tfidf_vect
-
-# Predict and evaluate the model
-def evaluate_model(clf, vectorizer, X_test, y_test):
-    X_test_transformed = vectorizer.transform(X_test)
-    y_pred = clf.predict(X_test_transformed)
-    accuracy = accuracy_score(y_test, y_pred)
-    conf_matrix = confusion_matrix(y_test, y_pred)
-    return accuracy, conf_matrix
+# Cross-validation function
+def perform_cross_validation(pipeline, X, y, cv):
+    scores = cross_val_score(pipeline, X, y, cv=cv, scoring='accuracy', n_jobs=-1)
+    return scores
 
 # Main workflow
 if __name__ == "__main__":
@@ -84,30 +57,59 @@ if __name__ == "__main__":
     X, y = load_data('train.txt')
     X = preprocess_text(X)
     
-    # Split into train and test sets
+    # Cross-validation strategy
+    k = 10  # Number of folds
+    skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+    
+    # Naive Bayes + CountVectorizer Pipeline
+    pipeline_nb = Pipeline([
+        ('vect', CountVectorizer(max_features=500, stop_words='english', max_df=0.7)),
+        ('clf', MultinomialNB())
+    ])
+    
+    # Cross-validation for Naive Bayes
+    scores_nb = perform_cross_validation(pipeline_nb, X, y, skf)
+    print(f"Naive Bayes Cross-Validation Accuracy: {scores_nb.mean():.4f} ± {scores_nb.std():.4f}")
+    
+    # SVC + TF-IDF Vectorizer Pipeline
+    pipeline_svc = Pipeline([
+        ('vect', TfidfVectorizer(stop_words='english', max_df=0.7)),
+        ('clf', SVC(kernel='linear', C=1.0))
+    ])
+    
+    # Perform cross-validation for SVC
+    scores_svc = perform_cross_validation(pipeline_svc, X, y, skf)
+    print(f"SVC Cross-Validation Accuracy: {scores_svc.mean():.4f} ± {scores_svc.std():.4f}")
+    
+    # Logistic Regression + TF-IDF Pipeline
+    pipeline_lr = Pipeline([
+        ('vect', TfidfVectorizer(stop_words='english', max_df=0.7)),
+        ('clf', LogisticRegression(max_iter=1000))
+    ])
+    
+    # Perform cross-validation for Logistic Regression
+    scores_lr = perform_cross_validation(pipeline_lr, X, y, skf)
+    print(f"Logistic Regression Cross-Validation Accuracy: {scores_lr.mean():.4f} ± {scores_lr.std():.4f}")
+    
+    # Optionally, you can choose the best model based on cross-validation scores
+    # For demonstration, let's proceed with Logistic Regression as before
+    
+    # Split into train and test sets for final evaluation (optional)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    # Train Naive Bayes Model
-    clf_nb, count_vect = train_naive_bayes(X_train, y_train)
-    accuracy_nb, conf_matrix_nb = evaluate_model(clf_nb, count_vect, X_test, y_test)
-    print(f"Naive Bayes Accuracy: {accuracy_nb}")
+    # Train Logistic Regression Model on the full training set
+    pipeline_lr.fit(X_train, y_train)
+    y_pred_lr = pipeline_lr.predict(X_test)
+    accuracy_lr = accuracy_score(y_test, y_pred_lr)
+    conf_matrix_lr = confusion_matrix(y_test, y_pred_lr)
+    print(f"Logistic Regression Final Test Accuracy: {accuracy_lr}")
     
-    # Train SVC Model
-    clf_svc, tfidf_vect_svc = train_svc(X_train, y_train)
-    accuracy_svc, conf_matrix_svc = evaluate_model(clf_svc, tfidf_vect_svc, X_test, y_test)
-    print(f"SVC Accuracy: {accuracy_svc}")
-    
-    # Train Logistic Regression Model
-    clf_lr, tfidf_vect_lr = train_logistic_regression(X_train, y_train)
-    accuracy_lr, conf_matrix_lr = evaluate_model(clf_lr, tfidf_vect_lr, X_test, y_test)
-    print(f"Logistic Regression Accuracy: {accuracy_lr}")
-
     # Load and preprocess the test data (test_no_labels.txt) with all fields
     X_test_no_labels = load_test_data('test_no_labels.txt')
     X_test_no_labels = preprocess_text(X_test_no_labels)
-
-    # Use the best-performing model to predict genres for the test set
-    predictions = clf_lr.predict(tfidf_vect_lr.transform(X_test_no_labels))
+    
+    # Use the best-performing model (SVC) to predict genres for the test set
+    predictions = pipeline_svc.predict(X_test_no_labels)
     
     # Save the results to results.txt
     with open('results.txt', 'w') as f:
