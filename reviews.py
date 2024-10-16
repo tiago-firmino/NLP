@@ -5,10 +5,11 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.pipeline import Pipeline
 import re
 import nltk
+import matplotlib.pyplot as plt
 
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
@@ -57,6 +58,9 @@ if __name__ == "__main__":
     X, y = load_data('train.txt')
     X = preprocess_text(X)
     
+    # Split data for testing the model
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
     # Cross-validation strategy
     k = 10  # Number of folds
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
@@ -71,16 +75,27 @@ if __name__ == "__main__":
     scores_svc = perform_cross_validation(pipeline_svc, X, y, skf)
     print(f"SVC Cross-Validation Accuracy: {scores_svc.mean():.4f} ± {scores_svc.std():.4f}")
     
-    # Load and preprocess the test data (test_no_labels.txt) with all fields
-    X_test_no_labels = load_test_data('test_no_labels.txt')
-    X_test_no_labels = preprocess_text(X_test_no_labels)
-
-    pipeline_svc.fit(X, y)
+    # Fit the model on the training data
+    pipeline_svc.fit(X_train, y_train)
     
-    # Use the best-performing model (SVC) to predict genres for the test set
-    predictions = pipeline_svc.predict(X_test_no_labels)
+    # Use the model to predict genres for the test set
+    predictions = pipeline_svc.predict(X_test)
+
+    # Calculate the confusion matrix
+    cm = confusion_matrix(y_test, predictions, labels=pipeline_svc.named_steps['clf'].classes_)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=pipeline_svc.named_steps['clf'].classes_)
+    
+    # Plot the confusion matrix
+    disp.plot()
+    plt.title('Confusion Matrix')
+    plt.show()
     
     # Save the results to results.txt
+    X_test_no_labels = load_test_data('test_no_labels.txt')
+    X_test_no_labels = preprocess_text(X_test_no_labels)
+    
+    final_predictions = pipeline_svc.predict(X_test_no_labels)
+
     with open('results.txt', 'w') as f:
-        for genre in predictions:
+        for genre in final_predictions:
             f.write(f"{genre}\n")
